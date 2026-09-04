@@ -5,6 +5,7 @@ __pycache__/
 venv/
 *.txt.bak
 chart_output.txt
+*_紫微斗數.txt
 *.jpg
 *.jpeg
 *.png
