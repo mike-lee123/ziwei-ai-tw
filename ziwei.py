@@ -348,18 +348,20 @@ class ZiWeiChart:
 
     # -- 十四主星 ---------------------------------------------------------------
     def _locate_ziwei(self):
+        """安紫微星訣：找出「出生日＋補數」恰能被局數整除的最小補數（offset），
+        商數（除以12取餘）減一為基準宮位，補數為偶則順行補數宮、為奇則逆行補數宮，
+        最後從寅宮起算。此為經查證與 iztro 開源實作一致的標準演算法。"""
         d, ju = self.lunar_day, self.ju
-        q, r = divmod(d, ju)
-        if r == 0:
-            steps = q - 1
-            return (2 + steps) % 12
-        q += 1
-        steps = q - 1
-        diff = ju - r
-        if diff % 2 == 0:
-            return (2 + steps + diff // 2) % 12
+        offset = 0
+        while (d + offset) % ju != 0:
+            offset += 1
+        quotient = (d + offset) // ju
+        steps = (quotient % 12) - 1
+        if offset % 2 == 0:
+            steps += offset
         else:
-            return (2 + steps - (diff + 1) // 2) % 12
+            steps -= offset
+        return (2 + steps) % 12
 
     def _build_main_stars(self):
         self.star_palace = {}   # 星名 -> 宮位索引
