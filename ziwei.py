@@ -270,13 +270,19 @@ class ZiWeiChart:
         self.branch_of = {i: BRANCHES[i] for i in range(12)}
 
     # -- 十二宮天干（五虎遁年起月訣，寅宮起） ----------------------------------
-    def _build_palace_stems(self):
+    @staticmethod
+    def _stems_from_seed(seed_stem):
+        """依五虎遁公式，用任一天干（生年干／流年干皆可）起出對應的十二宮天干。"""
         base_map = [2, 4, 6, 8, 0]  # 甲己丙/乙庚戊/丙辛庚/丁壬壬/戊癸甲 -> 寅宮天干索引
-        yin_stem_idx = base_map[stem_idx(self.year_stem) % 5]
-        self.stem_of = {}
+        yin_stem_idx = base_map[stem_idx(seed_stem) % 5]
+        stems = {}
         for i in range(12):
             s = (yin_stem_idx + ((i - 2) % 12)) % 10
-            self.stem_of[i] = STEMS[s]
+            stems[i] = STEMS[s]
+        return stems
+
+    def _build_palace_stems(self):
+        self.stem_of = self._stems_from_seed(self.year_stem)
 
     # -- 命宮／身宮 -----------------------------------------------------------
     def _build_ming_shen(self):
@@ -422,26 +428,21 @@ class ZiWeiChart:
         liu_lunar_year = ref.getLunar().getYear()
         return liu_lunar_year - self.lunar_year + 1
 
-    def liunian_analysis(self, solar_year):
-        """回傳指定西元年的大限／流年三層四化與疊宮應事分析（結構化資料）。"""
-        age = self.liunian_age(solar_year)
-        liu_stem, liu_branch = self.liunian_ganzhi(solar_year)
-        liu_palace_idx = idx(liu_branch)
-        dayun_idx = self.dayun_palace_by_age(age)
-        dayun_stem = self.stem_of[dayun_idx] if dayun_idx is not None else None
-
+    # -- 通用：多層四化疊加（本命固定為底層，其餘依傳入層級疊上去） -----------------
+    def _sihua_layers(self, layer_stems):
+        """layer_stems: [(層級名稱, 天干或 None), ...]。回傳 (layers, overlaps)。"""
         layers = {i: [] for i in range(12)}  # 宮位 -> [(層級, 星, 四化), ...]
         for star, tag in self.birth_sihua.items():
             p = self.star_palace.get(star)
             if p is not None:
                 layers[p].append(('本命', star, tag))
-        if dayun_stem is not None:
-            for star, tag, p in self._sihua_targets(dayun_stem):
-                layers[p].append(('大限', star, tag))
-        for star, tag, p in self._sihua_targets(liu_stem):
-            layers[p].append(('流年', star, tag))
+        for layer_name, stem in layer_stems:
+            if stem is None:
+                continue
+            for star, tag, p in self._sihua_targets(stem):
+                layers[p].append((layer_name, star, tag))
 
-        overlaps = {}  # 宮位 -> {'化祿': n, '化權': n, ...}（僅記錄 >=2 層重疊的四化）
+        overlaps = {}  # 宮位 -> {'化祿': n, ...}（僅記錄 >=2 層重疊的四化）
         for p, items in layers.items():
             counts = {}
             for _, _, tag in items:
@@ -449,6 +450,17 @@ class ZiWeiChart:
             hot = {tag: n for tag, n in counts.items() if n >= 2}
             if hot:
                 overlaps[p] = hot
+        return layers, overlaps
+
+    def liunian_analysis(self, solar_year):
+        """回傳指定西元年的本命／大限／流年三層四化與疊宮應事分析（結構化資料）。"""
+        age = self.liunian_age(solar_year)
+        liu_stem, liu_branch = self.liunian_ganzhi(solar_year)
+        liu_palace_idx = idx(liu_branch)
+        dayun_idx = self.dayun_palace_by_age(age)
+        dayun_stem = self.stem_of[dayun_idx] if dayun_idx is not None else None
+
+        layers, overlaps = self._sihua_layers([('大限', dayun_stem), ('流年', liu_stem)])
 
         return {
             'age': age,
@@ -458,6 +470,52 @@ class ZiWeiChart:
             'liu_stem': liu_stem,
             'liu_branch': liu_branch,
             'liu_palace_idx': liu_palace_idx,
+            'layers': layers,
+            'overlaps': overlaps,
+        }
+
+    # -- 流月：安流年斗君（流年支宮逆數生月、順數生時），再順數至目標農曆月 -----------
+    def liuyue_doujun(self, liu_palace_idx):
+        """流年斗君＝該流年正月所在宮位。公式：流年支宮逆數生月、順數生時。
+        已用範例命盤驗證：1961/1/29 丑時生，2026（丙午）年斗君落於未宮，與實際命盤相符。"""
+        return (liu_palace_idx - (self.lunar_month - 1) + self.hour_idx) % 12
+
+    def liuyue_analysis(self, solar_year, solar_month, solar_day):
+        """回傳指定西元日期所屬農曆月的本命／大限／流年／流月四層四化與疊宮應事分析。"""
+        ref = Solar.fromYmdHms(solar_year, solar_month, solar_day, 12, 0, 0)
+        ref_lunar = ref.getLunar()
+        gz = ref_lunar.getYearInGanZhi()
+        liu_stem, liu_branch = gz[0], gz[1]
+        liu_palace_idx = idx(liu_branch)
+        ref_lunar_year = ref_lunar.getYear()
+        ref_lunar_month = abs(ref_lunar.getMonth())
+        is_leap = ref_lunar.getMonth() < 0
+
+        age = ref_lunar_year - self.lunar_year + 1
+        dayun_idx = self.dayun_palace_by_age(age)
+        dayun_stem = self.stem_of[dayun_idx] if dayun_idx is not None else None
+
+        doujun_idx = self.liuyue_doujun(liu_palace_idx)
+        yue_palace_idx = (doujun_idx + (ref_lunar_month - 1)) % 12
+        yue_stem = self._stems_from_seed(liu_stem)[yue_palace_idx]
+
+        layers, overlaps = self._sihua_layers([
+            ('大限', dayun_stem), ('流年', liu_stem), ('流月', yue_stem),
+        ])
+
+        return {
+            'age': age,
+            'dayun_idx': dayun_idx,
+            'dayun_stem': dayun_stem,
+            'dayun_range': self.dayun_of.get(dayun_idx) if dayun_idx is not None else None,
+            'liu_stem': liu_stem,
+            'liu_branch': liu_branch,
+            'liu_palace_idx': liu_palace_idx,
+            'lunar_month': ref_lunar_month,
+            'is_leap_month': is_leap,
+            'doujun_idx': doujun_idx,
+            'yue_palace_idx': yue_palace_idx,
+            'yue_stem': yue_stem,
             'layers': layers,
             'overlaps': overlaps,
         }
@@ -532,20 +590,7 @@ def results_or_empty(res):
     return res
 
 
-def print_liunian(c: ZiWeiChart, solar_year: int):
-    r = c.liunian_analysis(solar_year)
-    print(f"\n【{solar_year} 年　大限流年分析】")
-    print("-" * 72)
-    print(f"虛歲：{r['age']}")
-    if r['dayun_idx'] is not None:
-        a0, a1 = r['dayun_range']
-        print(f"大限：{c.palace_gz(r['dayun_idx'])}宮"
-              f"（{c.palace_name(r['dayun_idx'])}宮，{a0}-{a1}歲，大限干：{r['dayun_stem']}）")
-    else:
-        print("大限：尚未起運（早運前參考命宮／福德宮）")
-    print(f"流年：{r['liu_stem']}{r['liu_branch']}　流年命宮在 {c.branch_of[r['liu_palace_idx']]}宮"
-          f"（{c.palace_name(r['liu_palace_idx'])}宮）")
-    print()
+def _print_layers_block(c: ZiWeiChart, r: dict):
     for i in range(12):
         items = r['layers'][i]
         if not items:
@@ -566,6 +611,43 @@ def print_liunian(c: ZiWeiChart, solar_year: int):
                 phint = event_hint(pname, tag)
                 if phint:
                     print(f"    · {pname}宮主題（{tag}）：{phint}")
+
+
+def print_liunian(c: ZiWeiChart, solar_year: int):
+    r = c.liunian_analysis(solar_year)
+    print(f"\n【{solar_year} 年　大限流年分析】")
+    print("-" * 72)
+    print(f"虛歲：{r['age']}")
+    if r['dayun_idx'] is not None:
+        a0, a1 = r['dayun_range']
+        print(f"大限：{c.palace_gz(r['dayun_idx'])}宮"
+              f"（{c.palace_name(r['dayun_idx'])}宮，{a0}-{a1}歲，大限干：{r['dayun_stem']}）")
+    else:
+        print("大限：尚未起運（早運前參考命宮／福德宮）")
+    print(f"流年：{r['liu_stem']}{r['liu_branch']}　流年命宮在 {c.branch_of[r['liu_palace_idx']]}宮"
+          f"（{c.palace_name(r['liu_palace_idx'])}宮）")
+    print()
+    _print_layers_block(c, r)
+
+
+def print_liuyue(c: ZiWeiChart, solar_year: int, solar_month: int, solar_day: int):
+    r = c.liuyue_analysis(solar_year, solar_month, solar_day)
+    print(f"\n【{solar_year}-{solar_month:02d}-{solar_day:02d}　大限流年流月分析】")
+    print("-" * 72)
+    print(f"虛歲：{r['age']}")
+    if r['dayun_idx'] is not None:
+        a0, a1 = r['dayun_range']
+        print(f"大限：{c.palace_gz(r['dayun_idx'])}宮"
+              f"（{c.palace_name(r['dayun_idx'])}宮，{a0}-{a1}歲，大限干：{r['dayun_stem']}）")
+    else:
+        print("大限：尚未起運（早運前參考命宮／福德宮）")
+    print(f"流年：{r['liu_stem']}{r['liu_branch']}　流年命宮在 {c.branch_of[r['liu_palace_idx']]}宮"
+          f"（{c.palace_name(r['liu_palace_idx'])}宮）")
+    leap_note = "（閏月）" if r['is_leap_month'] else ""
+    print(f"流月：農曆{r['lunar_month']}月{leap_note}　流年斗君在 {c.branch_of[r['doujun_idx']]}宮　"
+          f"流月落於 {c.branch_of[r['yue_palace_idx']]}宮（{c.palace_name(r['yue_palace_idx'])}宮，流月干：{r['yue_stem']}）")
+    print()
+    _print_layers_block(c, r)
 
 
 # ----------------------------------------------------------------------------
@@ -591,6 +673,10 @@ def main():
 
     target_year = int(sys.argv[5]) if len(sys.argv) > 5 else 2026
     print_liunian(chart, target_year)
+
+    if len(sys.argv) > 7:
+        target_month, target_day = int(sys.argv[6]), int(sys.argv[7])
+        print_liuyue(chart, target_year, target_month, target_day)
 
 
 if __name__ == "__main__":

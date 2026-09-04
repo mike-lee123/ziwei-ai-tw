@@ -199,7 +199,7 @@ st.markdown("---")
 # 十二宮明細表
 # ----------------------------------------------------------------------------
 tab1, tab2, tab3, tab4 = st.tabs(
-    ["📋 十二宮明細", "🌀 宮干四化飛星", "📅 大限流年應事", "📝 AI 提示詞（可複製）"]
+    ["📋 十二宮明細", "🌀 宮干四化飛星", "📅 大限流年流月應事", "📝 AI 提示詞（可複製）"]
 )
 
 with tab1:
@@ -240,15 +240,18 @@ with tab2:
                     st.write(f"　　→ {r['hint']}")
 
 with tab3:
-    st.caption("將本命四化、大限（十年運）四化、流年（該年）四化三層疊加，觀察同一宮位是否被多層同類四化「疊」中——這是判斷該年該宮位吉凶輕重的重要依據，尤其疊忌、疊祿最值得留意。")
-    default_year = datetime.date.today().year
-    target_year = st.number_input(
-        "選擇西元年", min_value=birth_date.year, max_value=birth_date.year + 120,
-        value=max(default_year, birth_date.year), step=1,
+    st.caption("將本命四化、大限（十年運）、流年（該年）、流月（該月）四層疊加，觀察同一宮位是否被多層同類四化「疊」中——這是判斷該年該月吉凶輕重的重要依據，尤其疊忌、疊祿最值得留意。")
+    today = datetime.date.today()
+    min_d = datetime.date(birth_date.year, 1, 1)
+    max_d = datetime.date(birth_date.year + 120, 12, 31)
+    default_d = today if min_d <= today <= max_d else min_d
+    target_date = st.date_input(
+        "選擇要查詢的西元日期（用來決定大限／流年／流月）",
+        value=default_d, min_value=min_d, max_value=max_d, format="YYYY-MM-DD",
     )
-    liu = chart.liunian_analysis(int(target_year))
+    liu = chart.liuyue_analysis(target_date.year, target_date.month, target_date.day)
 
-    lc1, lc2, lc3 = st.columns(3)
+    lc1, lc2, lc3, lc4 = st.columns(4)
     lc1.metric("虛歲", liu["age"])
     if liu["dayun_idx"] is not None:
         a0, a1 = liu["dayun_range"]
@@ -258,6 +261,10 @@ with tab3:
         lc2.metric("大限宮位", "尚未起運", "早運前參考命宮／福德宮")
     lc3.metric("流年宮位", f"{chart.palace_name(liu['liu_palace_idx'])}宮",
                f"流年干支：{liu['liu_stem']}{liu['liu_branch']}")
+    leap_note = "（閏月）" if liu["is_leap_month"] else ""
+    lc4.metric("流月宮位", f"{chart.palace_name(liu['yue_palace_idx'])}宮",
+               f"農曆{liu['lunar_month']}月{leap_note}，流月干：{liu['yue_stem']}")
+    st.caption(f"流年斗君（該年正月起點）落於 {chart.branch_of[liu['doujun_idx']]}宮")
 
     st.markdown("#### 各宮四化疊加與應事提示（星曜星性 × 宮干四化）")
 
@@ -324,13 +331,15 @@ with tab4:
             lines.append(f"・{pname}宮{stem}干飛入{r['target_name']}宮{r['star']}{r['tag']}{self_note}")
         lines.append("")
 
-    lines.append(f"【{int(target_year)} 年大限流年】虛歲 {liu['age']}")
+    lines.append(f"【{target_date.isoformat()} 大限流年流月】虛歲 {liu['age']}")
     if liu["dayun_idx"] is not None:
         a0, a1 = liu["dayun_range"]
         lines.append(f"大限：{chart.palace_name(liu['dayun_idx'])}宮（{a0}-{a1}歲，大限干：{liu['dayun_stem']}）")
     else:
         lines.append("大限：尚未起運")
     lines.append(f"流年：{liu['liu_stem']}{liu['liu_branch']}年，流年命宮在 {chart.palace_name(liu['liu_palace_idx'])}宮")
+    leap_note2 = "（閏月）" if liu["is_leap_month"] else ""
+    lines.append(f"流月：農曆{liu['lunar_month']}月{leap_note2}，流月落於 {chart.palace_name(liu['yue_palace_idx'])}宮（流月干：{liu['yue_stem']}）")
     for i in range(12):
         items = liu["layers"][i]
         if not items:
