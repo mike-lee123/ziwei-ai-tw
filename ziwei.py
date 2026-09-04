@@ -27,6 +27,53 @@ if sys.platform.startswith("win"):
 STEMS = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸']
 BRANCHES = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥']
 
+# ----------------------------------------------------------------------------
+# 八字（子平）十神與地支藏干
+# ----------------------------------------------------------------------------
+STEM_ELEMENT = {
+    '甲': '木', '乙': '木', '丙': '火', '丁': '火', '戊': '土',
+    '己': '土', '庚': '金', '辛': '金', '壬': '水', '癸': '水',
+}
+STEM_YANG = {s: (i % 2 == 0) for i, s in enumerate(STEMS)}  # 甲丙戊庚壬為陽
+ELEMENT_GENERATES = {'木': '火', '火': '土', '土': '金', '金': '水', '水': '木'}
+ELEMENT_CONTROLS = {'木': '土', '土': '水', '水': '火', '火': '金', '金': '木'}
+
+# 地支藏干：(天干, 權重)，權重僅用於粗略的日主旺衰參考，非精確子平算法
+ZHI_HIDE_GAN = {
+    '子': [('癸', 1.0)],
+    '丑': [('己', 0.6), ('癸', 0.3), ('辛', 0.1)],
+    '寅': [('甲', 0.6), ('丙', 0.3), ('戊', 0.1)],
+    '卯': [('乙', 1.0)],
+    '辰': [('戊', 0.6), ('乙', 0.3), ('癸', 0.1)],
+    '巳': [('丙', 0.6), ('庚', 0.3), ('戊', 0.1)],
+    '午': [('丁', 0.7), ('己', 0.3)],
+    '未': [('己', 0.6), ('丁', 0.3), ('乙', 0.1)],
+    '申': [('庚', 0.6), ('壬', 0.3), ('戊', 0.1)],
+    '酉': [('辛', 1.0)],
+    '戌': [('戊', 0.6), ('辛', 0.3), ('丁', 0.1)],
+    '亥': [('壬', 0.7), ('甲', 0.3)],
+}
+
+TEN_GOD_SUPPORT = {'比肩', '劫財', '正印', '偏印'}   # 幫身（比劫、印綬）
+TEN_GOD_DRAIN = {'食神', '傷官', '正財', '偏財', '正官', '七殺'}  # 耗身（食傷、財、官殺）
+
+
+def ten_god(day_stem, other_stem):
+    """回傳 other_stem 相對於 day_stem（日主）的十神名稱。"""
+    if other_stem == day_stem:
+        return '比肩'
+    de, oe = STEM_ELEMENT[day_stem], STEM_ELEMENT[other_stem]
+    same_yy = STEM_YANG[day_stem] == STEM_YANG[other_stem]
+    if oe == de:
+        return '比肩' if same_yy else '劫財'
+    if ELEMENT_GENERATES[de] == oe:      # 我生
+        return '食神' if same_yy else '傷官'
+    if ELEMENT_CONTROLS[de] == oe:       # 我剋
+        return '偏財' if same_yy else '正財'
+    if ELEMENT_CONTROLS[oe] == de:       # 剋我
+        return '七殺' if same_yy else '正官'
+    return '偏印' if same_yy else '正印'  # 生我
+
 # 十二宮名稱（由命宮起算，方向＝地支索引遞減）；顯示時一律加「宮」字
 PALACE_ORDER = ['命', '兄弟', '夫妻', '子女', '財帛', '疾厄',
                 '遷移', '僕役', '官祿', '田宅', '福德', '父母']
@@ -387,6 +434,40 @@ class ZiWeiChart:
         gender_num = 1 if self.gender == 'M' else 0
         self.bazi_yun = self.eight_char.getYun(gender_num)
         self.bazi_dayun_list = self.bazi_yun.getDaYun(13)  # 13輪覆蓋約130歲
+
+        self.bazi_day_master = self.bazi_pillars['day'][0]  # 日主天干
+        dm = self.bazi_day_master
+
+        # 四柱天干十神（日柱本身標記為「日主」）
+        self.bazi_stem_ten_god = {}
+        for pos in ('year', 'month', 'day', 'time'):
+            stem = self.bazi_pillars[pos][0]
+            self.bazi_stem_ten_god[pos] = '日主' if pos == 'day' else ten_god(dm, stem)
+
+        # 四柱地支藏干十神（僅日柱藏干不含日主本身的比肩重複標註問題，直接照算）
+        self.bazi_branch_hidden = {}
+        for pos in ('year', 'month', 'day', 'time'):
+            branch = self.bazi_pillars[pos][1]
+            self.bazi_branch_hidden[pos] = [
+                (gan, ten_god(dm, gan), weight) for gan, weight in ZHI_HIDE_GAN[branch]
+            ]
+
+        # 幫身／耗身簡易加權統計（僅供參考，非精確子平旺衰演算）
+        support, drain = 0.0, 0.0
+        for pos in ('year', 'month', 'time'):  # 日主本身不計入
+            tg = self.bazi_stem_ten_god[pos]
+            if tg in TEN_GOD_SUPPORT:
+                support += 1.0
+            elif tg in TEN_GOD_DRAIN:
+                drain += 1.0
+        for pos in ('year', 'month', 'day', 'time'):
+            for gan, tg, weight in self.bazi_branch_hidden[pos]:
+                if tg in TEN_GOD_SUPPORT:
+                    support += weight
+                elif tg in TEN_GOD_DRAIN:
+                    drain += weight
+        self.bazi_support_score = round(support, 2)
+        self.bazi_drain_score = round(drain, 2)
 
     def bazi_dayun_by_year(self, solar_year):
         """回傳指定西元年所落的八字大運（DaYun 物件）；查無對應區間則回傳 None。"""

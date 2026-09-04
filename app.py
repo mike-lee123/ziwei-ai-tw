@@ -12,7 +12,7 @@ import streamlit.components.v1 as components
 
 from ziwei import (
     ZiWeiChart, PALACE_ORDER, MAIN_STARS, event_hint,
-    STAR_NATURE, star_sihua_hint, SIHUA_NAMES,
+    STAR_NATURE, star_sihua_hint, SIHUA_NAMES, ten_god,
 )
 
 st.set_page_config(page_title="紫微斗數 AI 排盤", page_icon="🔮", layout="wide")
@@ -236,8 +236,8 @@ st.markdown("---")
 # ----------------------------------------------------------------------------
 # 十二宮明細表
 # ----------------------------------------------------------------------------
-tab1, tab2, tab3, tab4 = st.tabs(
-    ["📋 十二宮明細", "🌀 宮干四化飛星", "📅 大限流年流月應事", "📝 AI 提示詞（可複製）"]
+tab1, tab2, tab3, tab5, tab4 = st.tabs(
+    ["📋 十二宮明細", "🌀 宮干四化飛星", "📅 大限流年流月應事", "🀄 八字十神／大運", "📝 紫微八字 AI 提示詞（可複製）"]
 )
 
 with tab1:
@@ -340,9 +340,50 @@ with tab3:
     if not any_shown:
         st.info("該年三層四化未落於任何主星／輔星所在宮位。")
 
+with tab5:
+    st.caption("依淵海子平十神生剋原理，將四柱天干、地支藏干換算成十神，並列出完整八字大運，供與紫微命盤合參使用。")
+
+    PILLAR_LABEL = {'year': '年柱', 'month': '月柱', 'day': '日柱', 'time': '時柱'}
+    pillar_rows = []
+    for pos in ('year', 'month', 'day', 'time'):
+        gz = chart.bazi_pillars[pos]
+        hidden = "、".join(f"{gan}({tg})" for gan, tg, _ in chart.bazi_branch_hidden[pos])
+        pillar_rows.append({
+            "四柱": PILLAR_LABEL[pos],
+            "干支": gz,
+            "天干十神": chart.bazi_stem_ten_god[pos],
+            "地支藏干十神": hidden,
+        })
+    st.dataframe(pillar_rows, width="stretch", hide_index=True)
+
+    total = chart.bazi_support_score + chart.bazi_drain_score
+    support_pct = chart.bazi_support_score / total * 100 if total else 0
+    sc1, sc2, sc3 = st.columns(3)
+    sc1.metric("日主", f"{chart.bazi_day_master}（{'男' if gender=='M' else '女'}命）")
+    sc2.metric("幫身（比劫／印）加權", chart.bazi_support_score)
+    sc3.metric("耗身（食傷／財／官殺）加權", chart.bazi_drain_score)
+    st.progress(min(max(support_pct / 100, 0.0), 1.0), text=f"幫身佔比約 {support_pct:.0f}%（僅供粗略參考，非精確子平旺衰演算，實際仍需結合月令、通根、季節旺相休囚死綜合判斷）")
+
+    st.markdown("#### 八字大運")
+    dayun_rows = []
+    for dy in chart.bazi_dayun_list:
+        if dy.getIndex() < 1:
+            continue
+        gz = dy.getGanZhi()
+        dayun_rows.append({
+            "大運": gz,
+            "天干十神": ten_god(chart.bazi_day_master, gz[0]),
+            "起訖年齡": f"{dy.getStartAge()}-{dy.getEndAge()}歲",
+            "起訖西元年": f"{dy.getStartYear()}-{dy.getEndYear()}",
+            "目前": "👈" if dy.getStartYear() <= target_date.year <= dy.getEndYear() else "",
+        })
+    st.dataframe(dayun_rows, width="stretch", hide_index=True)
+    st.caption(f"查詢日期 {target_date.isoformat()} 對應八字大運：{bazi_dayun_str}　八字流年：{bazi_liunian_gz}"
+               f"（流年干支十神：{ten_god(chart.bazi_day_master, bazi_liunian_gz[0])}）")
+
 with tab4:
     lines = []
-    lines.append(f"※以下為「{display_name}」紫微斗數命盤基本資料與飛星四化，可複製貼給 AI（ChatGPT／Claude／Grok…）進行深入解讀。")
+    lines.append(f"※以下為「{display_name}」紫微斗數命盤＋八字四柱十神資料（紫微八字合參版），可複製貼給 AI（ChatGPT／Claude／Grok…）進行深入解讀。")
     lines.append("")
     lines.append(f"性別：{'男' if gender=='M' else '女'}")
     lines.append(f"陽曆生日：{birth_date.year}年{birth_date.month}月{birth_date.day}日 {birth_hour}時{birth_minute}分")
@@ -351,6 +392,25 @@ with tab4:
     lines.append(f"命局：{chart.ju_name}（納音：{chart.ming_nayin}）")
     lines.append(f"命宮：{chart.palace_gz(chart.ming_idx)}（{chart.branch_of[chart.ming_idx]}宮）　身宮：{chart.palace_gz(chart.shen_idx)}（{chart.palace_name(chart.shen_idx)}宮）")
     lines.append("")
+
+    lines.append("【八字四柱十神】")
+    for pos, label in (('year', '年柱'), ('month', '月柱'), ('day', '日柱'), ('time', '時柱')):
+        gz = chart.bazi_pillars[pos]
+        hidden = "、".join(f"{gan}({tg})" for gan, tg, _ in chart.bazi_branch_hidden[pos])
+        lines.append(f"{label}：{gz}　天干十神：{chart.bazi_stem_ten_god[pos]}　地支藏干：{hidden}")
+    lines.append(f"日主：{chart.bazi_day_master}水　幫身(比劫/印)加權：{chart.bazi_support_score}　"
+                 f"耗身(食傷/財/官殺)加權：{chart.bazi_drain_score}（僅粗略參考，非精確子平旺衰演算）")
+    lines.append("八字大運（依節氣精算起運，陽男陰女順排、陰男陽女逆排）：")
+    for dy in chart.bazi_dayun_list:
+        if dy.getIndex() < 1:
+            continue
+        gz = dy.getGanZhi()
+        cur_note = "　←目前查詢日期落於此運" if dy.getStartYear() <= target_date.year <= dy.getEndYear() else ""
+        lines.append(f"・{gz}（{ten_god(chart.bazi_day_master, gz[0])}）　{dy.getStartAge()}-{dy.getEndAge()}歲"
+                     f"（{dy.getStartYear()}-{dy.getEndYear()}）{cur_note}")
+    lines.append("")
+
+    lines.append("【紫微十二宮】")
     for offset, pname in enumerate(PALACE_ORDER):
         p_idx = (chart.ming_idx - offset) % 12
         stars = chart.palace_stars[p_idx]
@@ -366,16 +426,17 @@ with tab4:
             lines.append(f"・{pname}宮{stem}干飛入{r['target_name']}宮{r['star']}{r['tag']}{self_note}")
         lines.append("")
 
-    lines.append(f"【{target_date.isoformat()} 大限流年流月】虛歲 {liu['age']}")
+    lines.append(f"【{target_date.isoformat()} 大限流年流月 × 八字大運流年（合參）】虛歲 {liu['age']}")
     if liu["dayun_idx"] is not None:
         a0, a1 = liu["dayun_range"]
-        lines.append(f"大限：{chart.palace_name(liu['dayun_idx'])}宮（{a0}-{a1}歲，大限干：{liu['dayun_stem']}）")
+        lines.append(f"紫微大限：{chart.palace_name(liu['dayun_idx'])}宮（{a0}-{a1}歲，大限干：{liu['dayun_stem']}）")
     else:
-        lines.append("大限：尚未起運")
-    lines.append(f"流年：{liu['liu_stem']}{liu['liu_branch']}年，流年命宮在 {chart.palace_name(liu['liu_palace_idx'])}宮")
+        lines.append("紫微大限：尚未起運")
+    lines.append(f"紫微流年：{liu['liu_stem']}{liu['liu_branch']}年，流年命宮在 {chart.palace_name(liu['liu_palace_idx'])}宮")
     leap_note2 = "（閏月）" if liu["is_leap_month"] else ""
-    lines.append(f"流月：農曆{liu['lunar_month']}月{leap_note2}，流月落於 {chart.palace_name(liu['yue_palace_idx'])}宮（流月干：{liu['yue_stem']}）")
-    lines.append(f"八字大運：{bazi_dayun_str}　八字流年：{bazi_liunian_gz}")
+    lines.append(f"紫微流月：農曆{liu['lunar_month']}月{leap_note2}，流月落於 {chart.palace_name(liu['yue_palace_idx'])}宮（流月干：{liu['yue_stem']}）")
+    lines.append(f"八字大運：{bazi_dayun_str}（十神：{ten_god(chart.bazi_day_master, bazi_dayun.getGanZhi()[0]) if bazi_dayun and bazi_dayun.getGanZhi() else '尚未起運'}）"
+                 f"　八字流年：{bazi_liunian_gz}（十神：{ten_god(chart.bazi_day_master, bazi_liunian_gz[0])}）")
     for i in range(12):
         items = liu["layers"][i]
         if not items:
@@ -386,7 +447,7 @@ with tab4:
         hot_str = "（疊：" + "、".join(f"{t}x{n}" for t, n in hot.items()) + "）" if hot else ""
         lines.append(f"・{pname_i}宮：{tag_str}{hot_str}")
     ai_text = "\n".join(lines)
-    st.text_area("複製以下內容給 AI 分析：", ai_text, height=400)
+    st.text_area("複製以下內容給 AI 分析（紫微＋八字合參版）：", ai_text, height=400)
     st.download_button("⬇️ 下載為文字檔", ai_text, file_name=f"{display_name}_紫微斗數.txt")
 
 st.markdown("---")
