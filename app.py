@@ -12,7 +12,7 @@ import streamlit.components.v1 as components
 
 from ziwei import (
     ZiWeiChart, PALACE_ORDER, MAIN_STARS, event_hint,
-    STAR_NATURE, star_sihua_hint, SIHUA_NAMES, ten_god,
+    STAR_NATURE, star_sihua_hint, SIHUA_NAMES, ten_god, STEM_ELEMENT,
 )
 
 st.set_page_config(page_title="紫微斗數 AI 排盤", page_icon="🔮", layout="wide")
@@ -398,7 +398,7 @@ with tab4:
         gz = chart.bazi_pillars[pos]
         hidden = "、".join(f"{gan}({tg})" for gan, tg, _ in chart.bazi_branch_hidden[pos])
         lines.append(f"{label}：{gz}　天干十神：{chart.bazi_stem_ten_god[pos]}　地支藏干：{hidden}")
-    lines.append(f"日主：{chart.bazi_day_master}水　幫身(比劫/印)加權：{chart.bazi_support_score}　"
+    lines.append(f"日主：{chart.bazi_day_master}{STEM_ELEMENT[chart.bazi_day_master]}　幫身(比劫/印)加權：{chart.bazi_support_score}　"
                  f"耗身(食傷/財/官殺)加權：{chart.bazi_drain_score}（僅粗略參考，非精確子平旺衰演算）")
     lines.append("八字大運（依節氣精算起運，陽男陰女順排、陰男陽女逆排）：")
     for dy in chart.bazi_dayun_list:
