@@ -1,0 +1,2 @@
+streamlit>=1.40
+lunar-python>=1.4.4
