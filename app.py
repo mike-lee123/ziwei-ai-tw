@@ -6,6 +6,7 @@
 本檔案只負責畫面／互動，核心排盤邏輯全部在 ziwei.py（已獨立驗證過）。
 """
 
+import datetime
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -25,7 +26,8 @@ gender_label = st.sidebar.radio("性別", ["男", "女"], horizontal=True)
 gender = "M" if gender_label == "男" else "F"
 
 birth_date = st.sidebar.date_input(
-    "陽曆出生日期", value=None, min_value=None, max_value=None,
+    "陽曆出生日期", value=None,
+    min_value=datetime.date(1920, 1, 1), max_value=datetime.date(2036, 9, 4),
     format="YYYY-MM-DD",
 )
 col_h, col_m = st.sidebar.columns(2)
@@ -239,8 +241,7 @@ with tab2:
 
 with tab3:
     st.caption("將本命四化、大限（十年運）四化、流年（該年）四化三層疊加，觀察同一宮位是否被多層同類四化「疊」中——這是判斷該年該宮位吉凶輕重的重要依據，尤其疊忌、疊祿最值得留意。")
-    import datetime as _dt
-    default_year = _dt.date.today().year
+    default_year = datetime.date.today().year
     target_year = st.number_input(
         "選擇西元年", min_value=birth_date.year, max_value=birth_date.year + 120,
         value=max(default_year, birth_date.year), step=1,
