@@ -492,7 +492,6 @@ def print_chart(c: ZiWeiChart, name="", note=""):
     print("-" * 72)
 
     for i in range(12):
-        branch = c.branch_of[i]
         gz = c.palace_gz(i)
         pname = c.palace_name(i) + "宮"
         stars = c.palace_stars[i]
@@ -509,7 +508,7 @@ def print_chart(c: ZiWeiChart, name="", note=""):
             mark.append("身宮")
         mark_s = "★" + "/".join(mark) if mark else ""
         a0, a1 = c.dayun_of[i]
-        print(f"[{gz}{branch}] {pname:<4}大限{a0:>3}-{a1:<3}{mark_s:<8} "
+        print(f"[{gz}] {pname:<4}大限{a0:>3}-{a1:<3}{mark_s:<8} "
               f"主星：{','.join(main) if main else '（空宮）':<12} "
               f"輔煞：{','.join(minor) if minor else '無'}")
         if tags:
@@ -540,7 +539,7 @@ def print_liunian(c: ZiWeiChart, solar_year: int):
     print(f"虛歲：{r['age']}")
     if r['dayun_idx'] is not None:
         a0, a1 = r['dayun_range']
-        print(f"大限：{c.palace_gz(r['dayun_idx'])}{c.branch_of[r['dayun_idx']]}宮"
+        print(f"大限：{c.palace_gz(r['dayun_idx'])}宮"
               f"（{c.palace_name(r['dayun_idx'])}宮，{a0}-{a1}歲，大限干：{r['dayun_stem']}）")
     else:
         print("大限：尚未起運（早運前參考命宮／福德宮）")

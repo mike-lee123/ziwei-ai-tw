@@ -11,7 +11,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from ziwei import (
-    ZiWeiChart, PALACE_ORDER, MAIN_STARS, BRANCHES, event_hint,
+    ZiWeiChart, PALACE_ORDER, MAIN_STARS, event_hint,
     STAR_NATURE, star_sihua_hint, SIHUA_NAMES,
 )
 
@@ -131,7 +131,7 @@ def render_chart_html(c: ZiWeiChart, title: str) -> str:
         <div class="palace" style="grid-row:{row};grid-column:{col};">
           <div class="p-top">
             <span class="age">{a0}-{a1}</span>
-            <span class="gz">{c.palace_gz(i)}{c.branch_of[i]}</span>
+            <span class="gz">{c.palace_gz(i)}</span>
           </div>
           <div class="p-main">{main_html}</div>
           <div class="p-minor">{minor_html}</div>
@@ -215,7 +215,7 @@ with tab1:
         )
         rows.append({
             "宮位": chart.palace_name(i) + "宮",
-            "干支": chart.palace_gz(i) + chart.branch_of[i],
+            "干支": chart.palace_gz(i),
             "大限": f"{a0}-{a1}",
             "標記": mark,
             "主星": "、".join(main) or "空宮",
@@ -229,7 +229,7 @@ with tab2:
     for offset, pname in enumerate(PALACE_ORDER):
         p_idx = (chart.ming_idx - offset) % 12
         stem = chart.stem_of[p_idx]
-        with st.expander(f"{pname}宮（{chart.palace_gz(p_idx)}{chart.branch_of[p_idx]}）　宮干：{stem}"):
+        with st.expander(f"{pname}宮（{chart.palace_gz(p_idx)}）　宮干：{stem}"):
             for r in chart.flying_sihua(p_idx):
                 self_note = "　🔁 自化（回本宮）" if r["is_self"] else ""
                 nature = STAR_NATURE.get(r["star"], "")
@@ -315,7 +315,7 @@ with tab4:
         main = [s for s in stars if s in MAIN_STARS]
         minor = [s for s in stars if s not in MAIN_STARS]
         a0, a1 = chart.dayun_of[p_idx]
-        lines.append(f"【{pname}宮：宮位在{chart.palace_gz(p_idx)}{chart.branch_of[p_idx]}，大限{a0}-{a1}歲】")
+        lines.append(f"【{pname}宮：宮位在{chart.palace_gz(p_idx)}，大限{a0}-{a1}歲】")
         lines.append(f"主星：{'、'.join(main) if main else '無（空宮，需借對宮星曜參看）'}")
         lines.append(f"輔星／煞星：{'、'.join(minor) if minor else '無'}")
         stem = chart.stem_of[p_idx]
