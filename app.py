@@ -86,6 +86,27 @@ c7.metric("身宮", f"{chart.palace_gz(chart.shen_idx)}（{chart.palace_name(cha
 st.markdown("---")
 
 # ----------------------------------------------------------------------------
+# 查詢日期（同時驅動命盤中央的紫微大限流年 與 八字大運流年）
+# ----------------------------------------------------------------------------
+today = datetime.date.today()
+min_d = datetime.date(birth_date.year, 1, 1)
+max_d = datetime.date(birth_date.year + 120, 12, 31)
+default_d = today if min_d <= today <= max_d else min_d
+target_date = st.date_input(
+    "📅 查詢西元日期（決定命盤中央顯示的大限／流年／八字大運）",
+    value=default_d, min_value=min_d, max_value=max_d, format="YYYY-MM-DD",
+)
+liu = chart.liuyue_analysis(target_date.year, target_date.month, target_date.day)
+bazi_dayun = chart.bazi_dayun_by_year(target_date.year)
+bazi_liunian_gz = chart.bazi_liunian_ganzhi(target_date.year)
+if bazi_dayun is None or not bazi_dayun.getGanZhi():
+    bazi_dayun_str = "尚未起運"
+else:
+    bazi_dayun_str = f"{bazi_dayun.getGanZhi()}（{bazi_dayun.getStartAge()}-{bazi_dayun.getEndAge()}歲）"
+
+st.markdown("---")
+
+# ----------------------------------------------------------------------------
 # 命盤格局（傳統 4x4 排盤圖）
 # ----------------------------------------------------------------------------
 BRANCH_GRID_POS = {
@@ -97,7 +118,7 @@ BRANCH_GRID_POS = {
 SIHUA_COLOR = {"化祿": "#2e7d32", "化權": "#ef6c00", "化科": "#1565c0", "化忌": "#c62828"}
 
 
-def render_chart_html(c: ZiWeiChart, title: str) -> str:
+def render_chart_html(c: ZiWeiChart, title: str, liu: dict, bazi_dayun_str: str, bazi_liunian_gz: str) -> str:
     boxes = []
     for i in range(12):
         row, col = BRANCH_GRID_POS[i]
@@ -138,6 +159,13 @@ def render_chart_html(c: ZiWeiChart, title: str) -> str:
           <div class="p-bottom">{"".join(marks)}<span class="pname">{pname}</span></div>
         </div>''')
 
+    bp = c.bazi_pillars
+    if liu["dayun_idx"] is not None:
+        a0, a1 = liu["dayun_range"]
+        ziwei_dayun_str = f"{c.palace_name(liu['dayun_idx'])}宮（{a0}-{a1}歲）"
+    else:
+        ziwei_dayun_str = "尚未起運"
+
     center = f'''
         <div class="palace center" style="grid-row:2/4;grid-column:2/4;">
           <div class="center-title">{title}</div>
@@ -145,6 +173,11 @@ def render_chart_html(c: ZiWeiChart, title: str) -> str:
           <div class="center-line">農曆：{c.lunar_year}年{chr(9702)}{c.lunar_month}月{c.lunar_day}日 {c.hour_branch}時</div>
           <div class="center-line">命局：{c.ju_name}（{c.ming_nayin}）</div>
           <div class="center-line">命宮：{c.palace_gz(c.ming_idx)}　身宮：{c.palace_gz(c.shen_idx)}（{c.palace_name(c.shen_idx)}宮）</div>
+          <div class="center-sep"></div>
+          <div class="center-line">四柱八字：{bp['year']}　{bp['month']}　{bp['day']}　{bp['time']}</div>
+          <div class="center-sep"></div>
+          <div class="center-line">虛歲 {liu['age']}　｜　紫微大限：{ziwei_dayun_str}　流年：{liu['liu_stem']}{liu['liu_branch']}</div>
+          <div class="center-line">八字大運：{bazi_dayun_str}　流年：{bazi_liunian_gz}</div>
         </div>'''
 
     html = f'''
@@ -182,17 +215,22 @@ def render_chart_html(c: ZiWeiChart, title: str) -> str:
       .mark.ming {{ background:var(--accent); }}
       .mark.shen {{ background:#4a6fa5; }}
       .center {{ align-items:center; justify-content:center; text-align:center; background:var(--bg); border:none; }}
-      .center-title {{ font-size:18px; font-weight:700; margin-bottom:6px; color:var(--accent); }}
-      .center-line {{ font-size:12px; color:var(--text); margin:1px 0; }}
+      .center-title {{ font-size:17px; font-weight:700; margin-bottom:4px; color:var(--accent); }}
+      .center-line {{ font-size:11.5px; color:var(--text); margin:1px 0; }}
+      .center-sep {{ width:60%; height:1px; background:var(--border); margin:4px auto; }}
     </style></head>
     <body><div class="grid">{"".join(boxes)}{center}</div></body></html>
     '''
     return html
 
 
-components.html(render_chart_html(chart, display_name), height=650, scrolling=False)
+components.html(
+    render_chart_html(chart, display_name, liu, bazi_dayun_str, bazi_liunian_gz),
+    height=650, scrolling=False,
+)
 
 st.caption("色塊：綠=化祿　橘=化權　藍=化科　紅=化忌（生年四化）")
+st.caption(f"命盤中央依查詢日期 {target_date.isoformat()} 顯示紫微大限流年與八字大運流年，以利紫微／八字合參。")
 st.markdown("---")
 
 # ----------------------------------------------------------------------------
@@ -241,15 +279,7 @@ with tab2:
 
 with tab3:
     st.caption("將本命四化、大限（十年運）、流年（該年）、流月（該月）四層疊加，觀察同一宮位是否被多層同類四化「疊」中——這是判斷該年該月吉凶輕重的重要依據，尤其疊忌、疊祿最值得留意。")
-    today = datetime.date.today()
-    min_d = datetime.date(birth_date.year, 1, 1)
-    max_d = datetime.date(birth_date.year + 120, 12, 31)
-    default_d = today if min_d <= today <= max_d else min_d
-    target_date = st.date_input(
-        "選擇要查詢的西元日期（用來決定大限／流年／流月）",
-        value=default_d, min_value=min_d, max_value=max_d, format="YYYY-MM-DD",
-    )
-    liu = chart.liuyue_analysis(target_date.year, target_date.month, target_date.day)
+    st.caption(f"目前查詢日期：{target_date.isoformat()}（可於命盤上方調整）")
 
     lc1, lc2, lc3, lc4 = st.columns(4)
     lc1.metric("虛歲", liu["age"])
@@ -265,6 +295,11 @@ with tab3:
     lc4.metric("流月宮位", f"{chart.palace_name(liu['yue_palace_idx'])}宮",
                f"農曆{liu['lunar_month']}月{leap_note}，流月干：{liu['yue_stem']}")
     st.caption(f"流年斗君（該年正月起點）落於 {chart.branch_of[liu['doujun_idx']]}宮")
+
+    st.markdown("#### 八字大運流年（合參對照）")
+    bc1, bc2 = st.columns(2)
+    bc1.metric("八字大運", bazi_dayun_str)
+    bc2.metric("八字流年", bazi_liunian_gz)
 
     st.markdown("#### 各宮四化疊加與應事提示（星曜星性 × 宮干四化）")
 
@@ -340,6 +375,7 @@ with tab4:
     lines.append(f"流年：{liu['liu_stem']}{liu['liu_branch']}年，流年命宮在 {chart.palace_name(liu['liu_palace_idx'])}宮")
     leap_note2 = "（閏月）" if liu["is_leap_month"] else ""
     lines.append(f"流月：農曆{liu['lunar_month']}月{leap_note2}，流月落於 {chart.palace_name(liu['yue_palace_idx'])}宮（流月干：{liu['yue_stem']}）")
+    lines.append(f"八字大運：{bazi_dayun_str}　八字流年：{bazi_liunian_gz}")
     for i in range(12):
         items = liu["layers"][i]
         if not items:

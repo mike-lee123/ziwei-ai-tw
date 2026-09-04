@@ -264,6 +264,7 @@ class ZiWeiChart:
         self._build_minor_stars()
         self._build_birth_sihua()
         self._build_dayun()
+        self._build_bazi_yun()
 
     # -- 十二宮地支（固定：子=0 ... 亥=11） -----------------------------------
     def _build_palace_branches(self):
@@ -373,6 +374,31 @@ class ZiWeiChart:
             offset = (-k) % 12 if forward else k
             p_idx = (self.ming_idx - offset) % 12
             self.dayun_of[p_idx] = (start + 10 * k, start + 10 * k + 9)
+
+    # -- 四柱八字與八字大運（供與紫微命盤合參） ---------------------------------
+    def _build_bazi_yun(self):
+        self.eight_char = self.lunar.getEightChar()
+        self.bazi_pillars = {
+            'year': self.eight_char.getYear(),
+            'month': self.eight_char.getMonth(),
+            'day': self.eight_char.getDay(),
+            'time': self.eight_char.getTime(),
+        }
+        gender_num = 1 if self.gender == 'M' else 0
+        self.bazi_yun = self.eight_char.getYun(gender_num)
+        self.bazi_dayun_list = self.bazi_yun.getDaYun(13)  # 13輪覆蓋約130歲
+
+    def bazi_dayun_by_year(self, solar_year):
+        """回傳指定西元年所落的八字大運（DaYun 物件）；查無對應區間則回傳 None。"""
+        for dy in self.bazi_dayun_list:
+            if dy.getStartYear() <= solar_year <= dy.getEndYear():
+                return dy
+        return None
+
+    def bazi_liunian_ganzhi(self, solar_year):
+        """回傳指定西元年八字流年干支（依節氣定年柱界線，7/1為基準時刻避開節氣交界誤判）。"""
+        ref = Solar.fromYmdHms(solar_year, 7, 1, 12, 0, 0)
+        return ref.getLunar().getEightChar().getYear()
 
     # -- 生年四化（命主一生四化，標註於主星輔星上） -----------------------------
     def _build_birth_sihua(self):
